@@ -1,0 +1,77 @@
+{
+ "results": {
+  "popularity (ignores the basket)": {
+   "mrr": 0.124,
+   "median_rank": 34.0,
+   "hits@1": 0.05,
+   "hits@3": 0.12,
+   "hits@10": 0.24,
+   "accuracy": 0.05,
+   "mean_rank": 42.23
+  },
+  "2-gram (k=1.0)": {
+   "mrr": 0.1148,
+   "median_rank": 33.0,
+   "hits@1": 0.045,
+   "hits@3": 0.085,
+   "hits@10": 0.255,
+   "accuracy": 0.045,
+   "mean_rank": 41.98
+  },
+  "co-occurrence counts": {
+   "mrr": 0.1827,
+   "median_rank": 26.0,
+   "hits@1": 0.105,
+   "hits@3": 0.195,
+   "hits@10": 0.315,
+   "accuracy": 0.105,
+   "mean_rank": 40.53
+  },
+  "small LM (distilgpt2, pretrained)": {
+   "mrr": 0.1058,
+   "median_rank": 35.0,
+   "hits@1": 0.035,
+   "hits@3": 0.095,
+   "hits@10": 0.235,
+   "accuracy": 0.035,
+   "mean_rank": 45.87
+  }
+ },
+ "groups": {
+  "basket size 2-3": {
+   "cases": 53,
+   "popularity (ignores the basket)": 0.123,
+   "2-gram (k=1.0)": 0.1053,
+   "co-occurrence counts": 0.1147,
+   "small LM (distilgpt2, pretrained)": 0.103
+  },
+  "basket size 4-6": {
+   "cases": 82,
+   "popularity (ignores the basket)": 0.1346,
+   "2-gram (k=1.0)": 0.1317,
+   "co-occurrence counts": 0.1992,
+   "small LM (distilgpt2, pretrained)": 0.1008
+  },
+  "basket size 7+": {
+   "cases": 65,
+   "popularity (ignores the basket)": 0.1115,
+   "2-gram (k=1.0)": 0.1011,
+   "co-occurrence counts": 0.2174,
+   "small LM (distilgpt2, pretrained)": 0.1143
+  },
+  "hidden item is planted": {
+   "cases": 23,
+   "popularity (ignores the basket)": 0.0376,
+   "2-gram (k=1.0)": 0.071,
+   "co-occurrence counts": 0.6137,
+   "small LM (distilgpt2, pretrained)": 0.1003
+  },
+  "hidden item is ordinary": {
+   "cases": 177,
+   "popularity (ignores the basket)": 0.1353,
+   "2-gram (k=1.0)": 0.1204,
+   "co-occurrence counts": 0.1267,
+   "small LM (distilgpt2, pretrained)": 0.1065
+  }
+ }
+}

@@ -103,7 +103,19 @@ def test_lm_runs_in_evaluate(lm, shop):
 
 
 # Milestone 5: Present a comparison of the models' performance.
-@pytest.mark.skip(reason="remove this line when you start milestone 5")
-def test_milestone_5():
-    raise NotImplementedError("write the test for milestone 5")
+def test_comparison_report_and_breakdown(shop):
+    _, planted, names, train, test = shop
+    cases = core.make_cases(test, names, 80)
+    results = {"popularity": core.evaluate(cases, core.popularity_scorer(train, names), names),
+               "co-occurrence": core.evaluate(cases, core.cooccurrence_scores(train, names), names)}
+    groups = core.breakdown(cases, results, {i for p in planted for i in p.items})
+    assert sum(groups[g]["cases"] for g in ("basket size 2-3", "basket size 4-6", "basket size 7+")) == len(cases)
+    assert groups["hidden item is planted"]["cases"] + groups["hidden item is ordinary"]["cases"] == len(cases)
+    report = core.comparison_report(results, groups, len(cases))
+    assert "| popularity |" in report and "MRR by group" in report
 
+
+def test_bootstrap_interval_contains_the_mrr():
+    ranks = [1, 2, 5, 1, 10, 3, 1, 4]
+    lo, hi = core.bootstrap_mrr(ranks)
+    assert lo <= np.mean(1 / np.array(ranks)) <= hi

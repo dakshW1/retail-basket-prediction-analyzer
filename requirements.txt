@@ -1,7 +1,5 @@
-httpx
 pytest
 numpy
-pandas
 torch
 transformers
 thilimarketbasket @ git+https://github.com/thili-ai/thilimarketbasket.git

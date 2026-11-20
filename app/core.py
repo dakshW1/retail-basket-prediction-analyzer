@@ -342,6 +342,45 @@ def lm_scorer(model, tok, names, seed: int = 0):
 
 
 # --- Milestone 5: Present a comparison of the models' performance.
-# Hint: Summarize and compare the evaluation results to highlight model strengths and weaknesses.
-def milestone_5():  # TODO(milestone 5)
-    raise NotImplementedError("TODO(milestone 5)")
+
+def breakdown(cases, results: dict, planted_items: set) -> dict:
+    """MRR per model for (a) basket size and (b) whether the hidden item belongs to a planted itemset."""
+    groups = {"basket size 2-3": lambda c: len(c["visible"]) + 1 <= 3,
+              "basket size 4-6": lambda c: 4 <= len(c["visible"]) + 1 <= 6,
+              "basket size 7+": lambda c: len(c["visible"]) + 1 >= 7,
+              "hidden item is planted": lambda c: c["target"] in planted_items,
+              "hidden item is ordinary": lambda c: c["target"] not in planted_items}
+    out = {}
+    for g, test in groups.items():
+        idx = [i for i, c in enumerate(cases) if test(c)]
+        out[g] = {"cases": len(idx)}
+        for name, r in results.items():
+            out[g][name] = round(float(np.mean([1 / r["ranks"][i] for i in idx])), 4) if idx else None
+    return out
+
+
+def comparison_report(results: dict, groups: dict, n_cases: int) -> str:
+    """A markdown summary: the main table, the breakdown, and what it means."""
+    lines = [f"# Next-item prediction: n-gram vs small LM ({n_cases} held-out cases)", "",
+             "| Model | MRR (95% CI) | Accuracy (hits@1) | hits@3 | hits@10 | Mean rank |",
+             "|---|---|---|---|---|---|"]
+    for name, r in results.items():
+        lo, hi = bootstrap_mrr(r["ranks"])
+        lines.append(f"| {name} | {r['mrr']:.3f} ({lo:.3f}-{hi:.3f}) | {r['accuracy']:.1%} | {r['hits@3']:.1%} "
+                     f"| {r['hits@10']:.1%} | {r['mean_rank']} |")
+    names = list(results)
+    lines += ["", "## MRR by group", "", "| Group | Cases | " + " | ".join(names) + " |",
+              "|---|---|" + "---|" * len(names)]
+    for g, row in groups.items():
+        lines.append(f"| {g} | {row['cases']} | " + " | ".join(
+            "-" if row[n] is None else f"{row[n]:.3f}" for n in names) + " |")
+    best = max(results, key=lambda n: results[n]["mrr"])
+    lines += ["", f"Best overall: **{best}**."]
+    return "\n".join(lines) + "\n"
+
+
+def save_results(results: dict, groups: dict, report: str) -> None:
+    RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    slim = {n: {k: v for k, v in r.items() if k != "ranks"} for n, r in results.items()}
+    RESULTS_FILE.write_text(json.dumps({"results": slim, "groups": groups}, indent=1))
+    REPORT_FILE.write_text(report, encoding="utf-8")
