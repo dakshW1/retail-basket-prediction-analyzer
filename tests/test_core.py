@@ -42,9 +42,18 @@ def test_shuffled_orders_keep_the_items(shop):
 
 
 # Milestone 2: Implement the n-gram model to predict next items in a basket.
-@pytest.mark.skip(reason="remove this line when you start milestone 2")
-def test_milestone_2():
-    raise NotImplementedError("write the test for milestone 2")
+def test_ngram_probabilities_sum_to_one(shop):
+    _, _, names, train, _ = shop
+    for n in (1, 2, 3):
+        m = core.NGramModel(names, n=n, k=0.5).fit(core.shuffled_orders(train[:300], 1))
+        assert sum(m.prob([train[0][0]], x) for x in names) == pytest.approx(1.0)
+
+
+def test_bigram_learns_a_planted_pair():
+    names = ["a", "b", "c", "d"]
+    m = core.NGramModel(names, n=2, k=0.01, lambdas=(0.9, 0.1)).fit([["a", "b"], ["b", "a"]] * 50 + [["c", "d"]])
+    scores = m.scores(["a"])
+    assert names[int(np.argmax(scores))] == "b"
 
 
 # Milestone 3: Pretrain a small language model (like in the drill) on the basket sequences.

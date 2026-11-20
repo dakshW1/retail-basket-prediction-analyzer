@@ -114,9 +114,59 @@ def shuffled_orders(baskets, epochs: int = 3, seed: int = 0) -> list[list[str]]:
 
 
 # --- Milestone 2: Implement the n-gram model to predict next items in a basket.
-# Hint: Use the n-gram model construction method from 'Build a Next-Word Predictor from Scratch'.
-def milestone_2():  # TODO(milestone 2)
-    raise NotImplementedError("TODO(milestone 2)")
+
+START = "<s>"
+
+
+class NGramModel:
+    """An item-level n-gram model, built the way the next-word drill builds one: count n-grams, turn counts
+    into probabilities with add-k smoothing, and mix orders (interpolation) so an unseen context falls back
+    to shorter ones. Each item is one "word", and a basket is a "sentence"."""
+
+    def __init__(self, names, n: int = 3, k: float = 0.01, lambdas=(0.6, 0.3, 0.1)):
+        self.names, self.n, self.k = list(names), n, k
+        lam = np.array(lambdas[:n], dtype=float)[::-1]  # weights for order 0 (unigram), 1, ..., n-1
+        self.weights = tuple((lam / lam.sum()).tolist())
+        self.counts = [defaultdict(Counter) for _ in range(n)]  # order -> context tuple -> next item counts
+
+    def fit(self, sequences):
+        for seq in sequences:
+            padded = [START] * (self.n - 1) + list(seq)
+            for i in range(self.n - 1, len(padded)):
+                for order in range(self.n):  # order 0 = unigram, 1 = bigram, ...
+                    ctx = tuple(padded[i - order:i])
+                    self.counts[order][ctx][padded[i]] += 1
+        return self
+
+    def prob(self, ctx_items, item) -> float:
+        padded = [START] * (self.n - 1) + list(ctx_items)
+        V = len(self.names)
+        total = 0.0
+        for order, lam in zip(range(self.n), self.weights):
+            ctx = tuple(padded[len(padded) - order:]) if order else ()
+            c = self.counts[order].get(ctx, Counter())
+            total += lam * (c.get(item, 0) + self.k) / (sum(c.values()) + self.k * V)
+        return total
+
+    def scores(self, visible) -> np.ndarray:
+        """log P(item | the last n-1 visible items) for every catalogue item."""
+        return np.log([self.prob(visible, name) for name in self.names])
+
+
+def cooccurrence_scores(train, names):
+    """Item-to-item counting (the classic 'bought together' recommender): for each visible item, how
+    often each other item was in the same basket. Not order-limited like the n-gram."""
+    pos = {n: i for i, n in enumerate(names)}
+    co = np.zeros((len(names), len(names)))
+    for b in train:
+        idx = [pos[x] for x in set(b)]
+        for i in idx:
+            co[i, idx] += 1
+    np.fill_diagonal(co, 0)
+
+    def score(visible):
+        return np.log1p(sum(co[pos[v]] for v in visible)) if visible else np.zeros(len(names))
+    return score
 
 
 # --- Milestone 3: Pretrain a small language model (like in the drill) on the basket sequences.
