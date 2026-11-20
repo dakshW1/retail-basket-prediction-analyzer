@@ -10,3 +10,7 @@ __pycache__/
 # Local data
 data/
 *.db
+
+# trained LM (about 330 MB): rebuild with `python -m app.cli train`
+models/
+*.log

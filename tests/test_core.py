@@ -1,13 +1,44 @@
-"""Your tests. Each milestone in README.md gets one here: write the test first, then make it pass.
-
-They start skipped. Remove the `skip` line as you work on each milestone.
-"""
+"""Tests: one block per milestone in README.md. LM tests use `sshleifer/tiny-gpt2` (~2 MB) to stay fast."""
+import numpy as np
 import pytest
 
+from app import core
+
+TINY = "sshleifer/tiny-gpt2"
+
+
+@pytest.fixture(scope="module")
+def shop():
+    baskets, planted, names = core.simulate(1500, seed=1)
+    train, test = core.split(baskets)
+    return baskets, planted, names, train, test
+
+
 # Milestone 1: Generate a synthetic dataset of shopping baskets with planted itemsets.
-@pytest.mark.skip(reason="remove this line when you start milestone 1")
-def test_milestone_1():
-    raise NotImplementedError("write the test for milestone 1")
+def test_planted_itemsets_hit_their_support(shop):
+    baskets, planted, _, _, _ = shop
+    for row in core.planted_report(baskets, planted):
+        assert row["realised"] == pytest.approx(row["target"], abs=0.005)
+
+
+def test_planted_itemsets_share_no_items(shop):
+    _, planted, names, _, _ = shop
+    items = [i for p in planted for i in p.items]
+    assert len(items) == len(set(items)) and set(items) <= set(names)
+
+
+def test_baskets_are_sets_and_data_round_trips(shop, tmp_path):
+    baskets, planted, names, _, _ = shop
+    assert all(len(b) == len(set(b)) >= 1 for b in baskets)
+    core.save_data(baskets[:10], planted, names, tmp_path)
+    b2, p2, n2 = core.load_data(tmp_path)
+    assert b2 == baskets[:10] and n2 == names and p2[0]["items"] == list(planted[0].items)
+
+
+def test_shuffled_orders_keep_the_items(shop):
+    baskets = shop[0][:20]
+    orders = core.shuffled_orders(baskets, epochs=2)
+    assert len(orders) == 40 and all(sorted(o) == sorted(b) for o, b in zip(orders, baskets * 2))
 
 
 # Milestone 2: Implement the n-gram model to predict next items in a basket.
