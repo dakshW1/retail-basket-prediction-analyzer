@@ -170,9 +170,120 @@ def cooccurrence_scores(train, names):
 
 
 # --- Milestone 3: Pretrain a small language model (like in the drill) on the basket sequences.
-# Hint: Train your small language model following the approach in 'Teach a Language Model What Sells Together'.
-def milestone_3():  # TODO(milestone 3)
-    raise NotImplementedError("TODO(milestone 3)")
+
+def load_lm(name: str = "distilgpt2"):
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    tok = AutoTokenizer.from_pretrained(name)
+    tok.pad_token = tok.eos_token
+    model = AutoModelForCausalLM.from_pretrained(name)
+    return model, tok
+
+
+def to_text(items) -> str:
+    from thilimarketbasket.verbalize import PREFIX, SEPARATOR
+
+    return PREFIX + SEPARATOR.join(items)
+
+
+def next_token_loss(model, ids, mask):
+    """Average cross-entropy of predicting every token from the ones before it, padding masked out."""
+    import torch.nn.functional as F
+
+    logits = model(input_ids=ids[:, :-1], attention_mask=mask[:, :-1]).logits
+    loss = F.cross_entropy(logits.transpose(1, 2), ids[:, 1:], reduction="none")
+    m = mask[:, 1:].float()
+    return (loss * m).sum() / m.sum()
+
+
+def _batch(tok, sequences):
+    import torch
+
+    enc = [tok(to_text(s))["input_ids"] + [tok.eos_token_id] for s in sequences]
+    width = max(len(e) for e in enc)
+    ids = torch.tensor([e + [tok.eos_token_id] * (width - len(e)) for e in enc])
+    mask = torch.tensor([[1] * len(e) + [0] * (width - len(e)) for e in enc])
+    return ids, mask
+
+
+def validation_loss(model, tok, sequences, batch_size: int = 64) -> float:
+    import torch
+
+    model.eval()
+    total = count = 0.0
+    with torch.no_grad():
+        for i in range(0, len(sequences), batch_size):
+            ids, mask = _batch(tok, sequences[i:i + batch_size])
+            n = float(mask[:, 1:].sum())
+            total += next_token_loss(model, ids, mask).item() * n
+            count += n
+    return total / count
+
+
+def pretrain(model, tok, sequences, val=None, steps: int = 300, batch_size: int = 16, lr: float = 1e-4,
+             warmup: int = 20, eval_every: int = 50, seed: int = 0, log=print) -> list[dict]:
+    """Continued pretraining with the plain next-token objective: warm-up, then cosine decay."""
+    import torch
+
+    torch.manual_seed(seed)
+    rng = random.Random(seed)
+    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
+
+    def rate(step):
+        if step < warmup:
+            return (step + 1) / warmup
+        return 0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * (step - warmup) / max(1, steps - warmup)))
+
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, rate)
+    history, start, recent = [], time.time(), []
+    if val:
+        history.append({"step": 0, "loss": None, "val_loss": round(validation_loss(model, tok, val), 4)})
+        log(f"step 0  val loss {history[-1]['val_loss']:.3f}")
+    for step in range(1, steps + 1):
+        model.train()
+        ids, mask = _batch(tok, rng.sample(sequences, min(batch_size, len(sequences))))
+        loss = next_token_loss(model, ids, mask)
+        opt.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        opt.step()
+        sched.step()
+        recent.append(loss.item())
+        if step % eval_every == 0 or step == steps:
+            row = {"step": step, "loss": round(float(np.mean(recent)), 4), "seconds": round(time.time() - start, 1)}
+            if val:
+                row["val_loss"] = round(validation_loss(model, tok, val), 4)
+            history.append(row)
+            recent = []
+            log(f"step {step}  train {row['loss']:.3f}" + (f"  val {row['val_loss']:.3f}" if val else ""))
+    model.eval()
+    return history
+
+
+def lm_scores(model, tok, visible, names, seed: int = 0) -> np.ndarray:
+    """log P(" item" | "Basket: a; b; c;") for every catalogue item, summed over the item's tokens.
+    All candidates go through the model in one padded batch."""
+    import torch
+
+    from thilimarketbasket.verbalize import verbalize_prefix
+
+    prefix = tok(verbalize_prefix(visible, seed=seed))["input_ids"]
+    cands = [tok(" " + n)["input_ids"] for n in names]
+    width = len(prefix) + max(len(c) for c in cands)
+    ids = torch.tensor([prefix + c + [tok.eos_token_id] * (width - len(prefix) - len(c)) for c in cands])
+    with torch.no_grad():
+        logp = torch.log_softmax(model(ids).logits, dim=-1)
+    out = np.zeros(len(names))
+    for r, c in enumerate(cands):
+        out[r] = sum(logp[r, len(prefix) - 1 + j, t].item() for j, t in enumerate(c))
+    return out
+
+
+def save_lm(model, tok, out_dir: Path = MODEL_DIR, history: list | None = None) -> None:
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(out_dir)
+    tok.save_pretrained(out_dir)
+    (Path(out_dir) / "train_log.json").write_text(json.dumps(history or [], indent=1))
 
 
 # --- Milestone 4: Evaluate both models using next-item prediction metrics (e.g., accuracy, rank).

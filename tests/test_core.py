@@ -57,9 +57,25 @@ def test_bigram_learns_a_planted_pair():
 
 
 # Milestone 3: Pretrain a small language model (like in the drill) on the basket sequences.
-@pytest.mark.skip(reason="remove this line when you start milestone 3")
-def test_milestone_3():
-    raise NotImplementedError("write the test for milestone 3")
+@pytest.fixture(scope="module")
+def lm(shop):
+    _, _, _, train, _ = shop
+    model, tok = core.load_lm(TINY)
+    seqs = core.shuffled_orders(train[:60], 1)
+    history = core.pretrain(model, tok, seqs, val=seqs[:20], steps=20, batch_size=8, lr=5e-2,
+                            warmup=2, eval_every=10, log=lambda *_: None)
+    return model, tok, history
+
+
+def test_continued_pretraining_lowers_validation_loss(lm):
+    assert lm[2][-1]["val_loss"] < lm[2][0]["val_loss"]
+
+
+def test_lm_scores_every_item(lm, shop):
+    model, tok, _ = lm
+    names = shop[2]
+    s = core.lm_scores(model, tok, [names[0], names[1]], names)
+    assert s.shape == (len(names),) and np.all(s < 0)
 
 
 # Milestone 4: Evaluate both models using next-item prediction metrics (e.g., accuracy, rank).
