@@ -287,9 +287,58 @@ def save_lm(model, tok, out_dir: Path = MODEL_DIR, history: list | None = None) 
 
 
 # --- Milestone 4: Evaluate both models using next-item prediction metrics (e.g., accuracy, rank).
-# Hint: Calculate next-item prediction metrics such as accuracy and rank for both models.
-def milestone_4():  # TODO(milestone 4)
-    raise NotImplementedError("TODO(milestone 4)")
+
+def make_cases(test, names, n: int = 300, seed: int = 0) -> list[dict]:
+    """Hide one random item of each test basket (thilimarketbasket.evaluate.make_cases)."""
+    from thilimarketbasket.evaluate import make_cases as mk
+
+    return [c for c in mk([b for b in test if len(set(b)) >= 2], names, n, seed=seed)]
+
+
+def evaluate(cases, scorer, names, ks=(1, 3, 10)) -> dict:
+    """Rank every catalogue item for each case (items already in the basket are not candidates), then
+    MRR, accuracy (= hits@1) and hits@K via thilimarketbasket.evaluate. Ranks are kept for the comparison."""
+    from thilimarketbasket.evaluate import rank_of, summarise
+
+    pos = {n: i for i, n in enumerate(names)}
+    ranks = [rank_of(np.asarray(scorer(c["visible"]), dtype=float), pos[c["target"]],
+                     [pos[v] for v in c["visible"]]) for c in cases]
+    res = {k: round(v, 4) for k, v in summarise(ranks, ks=ks).items()}
+    res["accuracy"] = res["hits@1"]
+    res["mean_rank"] = round(float(np.mean(ranks)), 2)
+    return {**res, "ranks": ranks}
+
+
+def bootstrap_mrr(ranks, n: int = 1000, seed: int = 0) -> tuple[float, float]:
+    """95% interval for the MRR: resample the test cases with replacement."""
+    rng = np.random.default_rng(seed)
+    rr = 1.0 / np.asarray(ranks, dtype=float)
+    means = [rr[rng.integers(0, len(rr), len(rr))].mean() for _ in range(n)]
+    return round(float(np.percentile(means, 2.5)), 4), round(float(np.percentile(means, 97.5)), 4)
+
+
+def popularity_scorer(train, names):
+    from thilimarketbasket.evaluate import popularity_scores
+
+    s = popularity_scores(train, names)
+    return lambda visible: s
+
+
+def ngram_scorer(model: NGramModel, seed: int = 0):
+    """The n-gram only sees the last n-1 items, and a basket has no order, so we show it the visible
+    items in a random order, exactly like the LM."""
+    rng = random.Random(seed)
+
+    def score(visible):
+        v = list(visible)
+        rng.shuffle(v)
+        return model.scores(v)
+    return score
+
+
+def lm_scorer(model, tok, names, seed: int = 0):
+    count = iter(range(10**9))
+    return lambda visible: lm_scores(model, tok, visible, names, seed=seed + next(count))
 
 
 # --- Milestone 5: Present a comparison of the models' performance.

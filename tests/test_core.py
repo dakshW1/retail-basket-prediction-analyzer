@@ -79,9 +79,27 @@ def test_lm_scores_every_item(lm, shop):
 
 
 # Milestone 4: Evaluate both models using next-item prediction metrics (e.g., accuracy, rank).
-@pytest.mark.skip(reason="remove this line when you start milestone 4")
-def test_milestone_4():
-    raise NotImplementedError("write the test for milestone 4")
+def test_cases_hide_one_real_item(shop):
+    _, _, names, _, test = shop
+    for c in core.make_cases(test, names, 40):
+        assert c["target"] not in c["visible"] and any(set(c["visible"]) | {c["target"]} == set(b) for b in test)
+
+
+def test_evaluate_metrics_and_baseline_order(shop):
+    _, _, names, train, test = shop
+    cases = core.make_cases(test, names, 150)
+    pop = core.evaluate(cases, core.popularity_scorer(train, names), names)
+    co = core.evaluate(cases, core.cooccurrence_scores(train, names), names)
+    assert {"mrr", "accuracy", "hits@3", "hits@10", "mean_rank"} <= set(pop)
+    assert pop["accuracy"] == pop["hits@1"] and 0 < pop["mrr"] <= 1
+    assert co["mrr"] > pop["mrr"]  # reading the basket beats ignoring it
+
+
+def test_lm_runs_in_evaluate(lm, shop):
+    model, tok, _ = lm
+    _, _, names, _, test = shop
+    res = core.evaluate(core.make_cases(test, names, 5), core.lm_scorer(model, tok, names), names)
+    assert 0 < res["mrr"] <= 1 and len(res["ranks"]) == 5
 
 
 # Milestone 5: Present a comparison of the models' performance.
